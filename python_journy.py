@@ -2,9 +2,7 @@ import os
 import requests
 import json
 import time
-from utils.promt_setup import promt_gen
-from utils.sd_api import SD_APICALL
-from utils.SD_gen import generator 
+from utils.SD_gen import generator,upscaling,variation
 from PIL import Image
 import nextcord 
 from nextcord.ext import commands 
@@ -14,8 +12,10 @@ import base64
 
 
 def combine_images(images):
+    for i, image in enumerate(images):
+        image = BytesIO(base64.decodebytes(image.encode("utf-8"))) 
+        images[i]=Image.open(image)
     # Create a blank canvas for the final grid image
-    images=[Image.open(image) for image in images]
     grid_image = Image.new('RGB', (2 * images[0].width, 2 * images[0].height))
 
     # Iterate over each image and paste it onto the grid
@@ -40,52 +40,64 @@ async def on_ready():
 #Model select 
 model_dic={}
 
-class ImageGrid_Buttons(View):
-    def __init__(self,images,grid):
-        super().__init__()
-        self.images=images 
-        self.grid=grid
+def ImgResponseToDiscord(img_responce):
+    image = BytesIO(base64.decodebytes(img_responce.encode("utf-8")))
+    image=Image.open(image)
+    image_bytes = BytesIO()
+    image.save(image_bytes, format="PNG")
+    image_bytes.seek(0)
+    file=nextcord.File(image_bytes,"image.png")
+    return file
 
-        for i in range(0,len(self.images)):
-            self.create_button(i+1,self.images[i])
-    def create_button(self,option_number,image):
-        async def option(self, button: nextcord.Button,interaction=nextcord.Interaction):
-            await interaction.response.send_message(content=f"You selected Option {option_number}",file=nextcord.File(image,"genimage.png"))
-        
-        setattr(self, f"option_{option_number}", nextcord.ui.button(label=f"Option {option_number}", style=nextcord.ButtonStyle.primary)(option))
-
-class ImageOptionButton(View):
-    def __init__(self):
-        super().__init__()
-        self.images=[]
-    async def on_button_click(self,button:nextcord.Button,interaction:nextcord.Interaction):
-        #async def on_button_click(self, button: nextcord.Button, interaction: nextcord.Interaction):
-        button_index = int(button.custom_id.replace("U",""))-1
-        print("clicked button", button_index)
-        await interaction.response.send_message("Image selected",
-                                            file=nextcord.File(self.images[button_index],"image.png"))
-class ImageButton(nextcord.ui.Button):
-    def __init__(self, image_url: str, *args, **kwargs):
+class ImageUPscaleButton(nextcord.ui.Button):
+    def __init__(self, image_str: str, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.image_url = image_url
+        self.image_str = image_str
 
     async def callback(self, interaction: nextcord.Interaction):
         # Get the user who clicked the button
-        user = interaction.user
         # Create an embed with the image
-        self.image_url.seek(0)
-        file=nextcord.File(self.image_url,"image.png")
-        await interaction.response.send_message(f"Upscaled", ephemeral=False, file=file)
+        print("button click")
+        response=upscaling(self.image_str,SD.API_URL)
+        file=ImgResponseToDiscord(response["image"])
+        await interaction.response.send_message("Upscaled x2", ephemeral=False, file=file)
 
 
 
+class ImageVariationButton(nextcord.ui.Button):
+    def __init__(self,image_str: str, base_payload: str, *args,**kwargs):
+        super().__init__(*args,**kwargs)
+        self.image_str = image_str
+        self.base_payload = base_payload
+
+    async def callback(self, interaction: nextcord.Interaction):
+        #await interaction.response.defer() 
+        ETA = int(time.time()+60)
+        msg = await interaction.response.send_message(f" Varation ETA: <t:{ETA}:R>")
+        reponse=variation(self.image_str,SD.API_URL,self.base_payload)
+        images = reponse['images']
+        grid=combine_images(images.copy())
+        new_image_bytes = BytesIO()
+        grid.save(new_image_bytes, format="PNG")
+        new_image_bytes.seek(0)
+        grid.save("test_grid.png")
+        file=nextcord.File(new_image_bytes,"Varation_grid.png")
+        print(file)
+        view=View()
+        for i,image in enumerate(images):
+            button_up=ImageUPscaleButton(image_str=image,
+                         label=f"U{i+1}", style=nextcord.ButtonStyle.blurple)
+            view.add_item(button_up)
+        await msg.edit(content="",file=file,view=view)
+        
+       
 #Generate
 @bot.command()
 async def generate(ctx: commands.Context,*, prompt: str):
     ETA = int(time.time()+60)
     msg = await ctx.send(f" ETA: <t:{ETA}:R>")
     #print(prompt)
-    results=SD(prompt)
+    results,payload=SD(prompt)
     if not "images" in results:
         print("Error")
         msg=await ctx.send(str(results["detail"]["msg"]))
@@ -93,21 +105,28 @@ async def generate(ctx: commands.Context,*, prompt: str):
         images = results['images']
         
         #view=ImageOptionButton()
-        view= View()
+        view_up= View(timeout=None)
+        view_var=View(timeout=None)
+        #def button setup
         for i,image in enumerate(images):
-            image = BytesIO(base64.decodebytes(image.encode("utf-8"))) 
-            button=ImageButton(image_url=image,
+            button_up=ImageUPscaleButton(image_str=image,
                          label=f"U{i+1}", style=nextcord.ButtonStyle.blurple)
-            view.add_item(button)
-            images[i]=image
+    
+            view_up.add_item(button_up)
+            button_var=ImageVariationButton(image,payload,
+                        label=f"V{i+1}", style=nextcord.ButtonStyle.blurple)
+            view_var.add_item(button_var)
+         
+           
         grid=combine_images(images)
-        
+
         image_bytes = BytesIO()
         grid.save(image_bytes, format="PNG")
         image_bytes.seek(0)
-        #view= ImageGrid_Buttons(images,image_bytes)
+
         await msg.edit(content="",file=nextcord.File(image_bytes,"image.png"))
-        await ctx.send("---",view=view)
+        await ctx.send("",view=view_var)
+        await ctx.send("",view=view_up)
        
 bot.run(os.getenv("DISCORD_TOKEN"))
 

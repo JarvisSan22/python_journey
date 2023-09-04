@@ -8,6 +8,25 @@ import os
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv())
 
+
+
+def upscaling(img_str,url,resize=2,model="R-ESRGAN 4x+ Anime6B"):
+        arg_dict={
+        "upscaling_resize": resize,
+        "upscaler_1":model ,
+        "image":img_str
+        }
+        response = requests.post(url=f'{url}/sdapi/v1/extra-single-image', json=arg_dict)
+        return response.json()
+
+def variation(img_str,url,payload,denosing=0.55,seed_varation=1):
+    payload["init_images"]=[img_str]
+    payload["denoising_strength"]=denosing
+    payload["subseed"]=-1
+    payload["subseed_strength"]=0.5
+    response = requests.post(url=f'{url}/sdapi/v1/img2img', json=payload)
+    return response.json()
+
 def arToSize(aspect_ratio,width,height,fix="height"):
     w_ar,h_ar = aspect_ratio.split(':')
     ar=float(w_ar)/float(h_ar)
@@ -28,11 +47,12 @@ class generator():
         self.model_loc=os.path.join(self.file_loc,"models","Stable-diffusion")
         self.lora_models=os.path.join(self.file_loc,"models","lora")
         self.API_URL=API_URL
-        self.steps=20
+        self.steps=30
         self.cfg=8
         self.sampler="DDIM"
-        self.ng="NSFW, large_hips, large_breasts, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
+        self.ng="NSFW, large_hips,naked, large_breast, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
         super().__init__()
+
     def __model_dic(self):
         model_list=os.listdir(model_list)
         model_dic={}    
@@ -41,8 +61,8 @@ class generator():
         return model_dic    
     def __promt_setup(self,text,type="text2img"):
         arg_dict={
-         "ng":self.ng,
-         "seed":-1,
+         
+         "seed":8888,
          "steps":self.steps,
          "width":820,
          "batch_size":1,
@@ -54,7 +74,9 @@ class generator():
         }
         #Settings 
         #
-        options=["ar","img2img-at","ds"]
+
+
+        options=["ar","img2img-at","ds","upsacling"]
         if "--" in text:
             args=text.split("--")[1:] #assumes prompt is the first part 
             text=text[:text.find("--")]
@@ -74,7 +96,7 @@ class generator():
                         arg_dict["width"]=nw
                         arg_dict["height"]=nh
                     #arg_dict[arg_type]=arg.replace(arg_type,"")
-                    text=text.replace(arg,"") #
+                    
         
 
         print(text)
@@ -91,12 +113,21 @@ class generator():
             if not arg_dict["denoising_strength"]:
                 arg_dict["denoising_strength"]=0.75
 
-        arg_dict["prompt"]=text
+
+        arg_dict["prompt"]=text +",(retro_anime_artstyle), ayaka_gal_style, galverse <lora:GalverseV45_Multi_V1:0.75>"
+        #arg_dict["negative_prompt"]=self.ng
         self.payload=arg_dict
         self.type=type
         #return type
+    def upscaling(self,img_str,resize=2,model="R-ESRGAN 4x+Anime6B"):
+        arg_dict={
+        "upscaling_resize": resize,
+        "upscaler_1":model ,
+        "image":img_str
+        }
+        response = requests.post(url=f'{self.API_URL}/sdapi/v1/extra-single-image', json=arg_dict)
+        return response.json()
 
-        
 
     def __imgbuffer(self,url:str):
         image = Image.open(requests.get(url, stream=True).raw)
@@ -115,9 +146,11 @@ class generator():
         print("API Call")
         if self.type=="text2img":
             response = requests.post(url=f'{self.API_URL}/sdapi/v1/txt2img', json=self.payload)
+        elif self.type=="upscale":
+            response = requests.post(url=f'{self.API_URL}/sdapi/v1/extra-single-image', json=self.payload)
         else:
             response = requests.post(url=f'{self.API_URL}/sdapi/v1/img2img', json=self.payload)
         print("Recived")
         r = response.json()
-        return r
+        return r,self.payload
 
