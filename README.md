@@ -1,6 +1,7 @@
 # python_journey
 midjourny discord bot clone made in python and using StableDiffusion Web UI by automatic 1111
 
+![test image](https://github.com/JarvisSan22/python_journey/blob/main/Example_20230905.png)
 
 # Setup
 * (1) First install and setup [automatic1111/stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui), download a model and lora model into the repo. When all downloaded and installed run it with the tag ```--api ``` to activate the api settins
