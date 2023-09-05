@@ -13,6 +13,8 @@ import base64
 from dotenv import load_dotenv, find_dotenv
 _ = load_dotenv(find_dotenv())
 
+
+#Lora model dic
 channel_model_dic={
     "gal_sd_m1":" ayaka_gal_style, galverse <lora:GalverseV45_Multi_V1:0.75>",
     "gal_sd_m2":" <lora:GalverseMV_V3_ft:0.75>",
@@ -99,27 +101,30 @@ class ImageVariationButton(nextcord.ui.Button):
             view.add_item(button_up)
         await msg.edit(content="",file=file,view=view)
         
-
+#Generator slash commend 
 serverid=os.getenv("SERVER_ID")
 @bot.slash_command(guild_ids=[serverid],description="Galverse AI gen")
 async def generate(interaction:  nextcord.Interaction ,prompt:str ):
     print(prompt)
     ETA = int(time.time()+60)
     msg = await interaction.response.send_message(f" Requests sent <t:{ETA}:R>")
+    #Read channel lora model 
     lora=None
     if interaction.channel.name in list(channel_model_dic.keys()):# add channel model to promt
         lora=channel_model_dic[interaction.channel.name]
-    #print(prompt)
+    else:
+        print("No channel lora selected")
+    #SD Image ai call 
     results,payload=SD(prompt,lora=lora)
     if not "images" in results:
         print("Error")
         msg=await interaction.response.send_message(str(results["detail"]["msg"]))
     else:
         images = results['images']
-        #view=ImageOptionButton()
+        #Button view setup
         view_up= View(timeout=None)
         view_var=View(timeout=None)
-        #def button setup
+        #Create buttons 
         for i,image in enumerate(images):
             button_up=ImageUPscaleButton(image_str=image,
                          label=f"U{i+1}", style=nextcord.ButtonStyle.blurple)
@@ -127,52 +132,17 @@ async def generate(interaction:  nextcord.Interaction ,prompt:str ):
             button_var=ImageVariationButton(image,payload,
                         label=f"V{i+1}", style=nextcord.ButtonStyle.blurple)
             view_var.add_item(button_var)  
+        #Turn images into grid 
         grid=combine_images(images)
         image_bytes = BytesIO()
         grid.save(image_bytes, format="PNG")
         image_bytes.seek(0)
-
+        #Send Messaged and follow up buttons 
         await msg.edit(content="",file=nextcord.File(image_bytes,"image.png"))
-        await interaction.followup.send("", view=view_var) #response.send_message("",view=view_var)
-        #await interaction.response.send_message("",view=view_up)
+        await interaction.followup.send("", view=view_var)
+        await interaction.followup.send_message("",view=view_up)
 
-
-#Generate
-@bot.command()
-async def generate(ctx: commands.Context,*, prompt: str):
-    ETA = int(time.time()+60)
-    msg = await ctx.send(f" ETA: <t:{ETA}:R>")
-    print(ctx.channel.name)
-    lora=None
-    if ctx.channel.name in list(channel_model_dic.keys()):# add channel model to promt
-        lora=channel_model_dic[ctx.channel.name]
-    #print(prompt)
-    results,payload=SD(prompt,lora=lora)
-    if not "images" in results:
-        print("Error")
-        msg=await ctx.send(str(results["detail"]["msg"]))
-    else:
-        images = results['images']
-        #view=ImageOptionButton()
-        view_up= View(timeout=None)
-        view_var=View(timeout=None)
-        #def button setup
-        for i,image in enumerate(images):
-            button_up=ImageUPscaleButton(image_str=image,
-                         label=f"U{i+1}", style=nextcord.ButtonStyle.blurple)
-            view_up.add_item(button_up)
-            button_var=ImageVariationButton(image,payload,
-                        label=f"V{i+1}", style=nextcord.ButtonStyle.blurple)
-            view_var.add_item(button_var)  
-        grid=combine_images(images)
-        image_bytes = BytesIO()
-        grid.save(image_bytes, format="PNG")
-        image_bytes.seek(0)
-
-        await msg.edit(content="",file=nextcord.File(image_bytes,"image.png"))
-        await ctx.send("",view=view_var)
-        await ctx.send("",view=view_up)
-       
+#Run discord bot 
 bot.run(os.getenv("DISCORD_TOKEN"))
 
 
