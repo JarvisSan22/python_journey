@@ -47,7 +47,7 @@ class generator():
         self.model_loc=os.path.join(self.file_loc,"models","Stable-diffusion")
         self.lora_models=os.path.join(self.file_loc,"models","lora")
         self.API_URL=API_URL
-        self.steps=30
+        self.steps=20
         self.cfg=8
         self.sampler="DDIM"
         self.ng="NSFW, large_hips,naked, large_breast, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry",
@@ -59,7 +59,7 @@ class generator():
         for i, model in enumerate(model_list):
             model_dic[i]={"name":os.path.basename(model).split(".")[0],"path":os.path.join(self.model_loc,model)}
         return model_dic    
-    def __promt_setup(self,text,type="text2img"):
+    def __promt_setup(self,text,lora=None,type="text2img"):
         arg_dict={
          
          "seed":8888,
@@ -69,6 +69,7 @@ class generator():
          "n_iter":4,
          "height":820,
          "cfg":self.cfg,
+       
          "sampler":self.sampler,
          "NSFW_filter":False,
         }
@@ -99,7 +100,7 @@ class generator():
                     
         
 
-        print(text)
+        #print(text)
         if "https://" in text: #img2img
             #non img prompt 
             type="img2img"
@@ -113,9 +114,11 @@ class generator():
             if not arg_dict["denoising_strength"]:
                 arg_dict["denoising_strength"]=0.75
 
-
-        arg_dict["prompt"]=text +",(retro_anime_artstyle), ayaka_gal_style, galverse <lora:GalverseV45_Multi_V1:0.75>"
-        #arg_dict["negative_prompt"]=self.ng
+        if lora:
+            arg_dict["prompt"]=text +",(retro_artstyle)," + lora
+        else:
+            arg_dict["prompt"]=text
+        arg_dict["negative_prompt"]=str(self.ng)
         self.payload=arg_dict
         self.type=type
         #return type
@@ -126,6 +129,7 @@ class generator():
         "image":img_str
         }
         response = requests.post(url=f'{self.API_URL}/sdapi/v1/extra-single-image', json=arg_dict)
+        print("Upscaling result",response)
         return response.json()
 
 
@@ -141,8 +145,8 @@ class generator():
         return img_str
     
 
-    def __call__(self,text):
-        self.__promt_setup(text)
+    def __call__(self,text,lora=None):
+        self.__promt_setup(text,lora=lora)
         print("API Call")
         if self.type=="text2img":
             response = requests.post(url=f'{self.API_URL}/sdapi/v1/txt2img', json=self.payload)
