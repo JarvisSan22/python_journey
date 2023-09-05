@@ -24,6 +24,6 @@ To run use the slash command generate. The command take input the same way midjo
 [ ] Seed options </br>
 [ ] negative prompt option</br>
 [ ] Image saving by user </br>
-[ ] Face detection and high res inpaint option 
-[ ] inpaint control net pfp to fullbody option 
-[ ] Pixelation option 
+[ ] Face detection and high res inpaint option </br>
+[ ] inpaint control net pfp to fullbody option </br>
+[ ] Pixelation option </br>
